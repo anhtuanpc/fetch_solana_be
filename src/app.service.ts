@@ -1,27 +1,38 @@
 import { Injectable } from '@nestjs/common';
-import { HTTP_STATUS, MESSAGE_STATUS, RPC_URL } from './app.const';
-
-interface BlockResult {
-  transactions: any[];
-}
-
-interface SolanaRpcResponse {
-  jsonrpc: string;
-  id: number;
-  result?: BlockResult;
-  error?: {
-    code: number;
-    message: string;
-  };
-}
+import {
+  HTTP_STATUS,
+  MESSAGE_STATUS,
+  RPC_URL,
+  SolanaRpcResponse,
+  TransactionResponse,
+} from './app.const';
 
 @Injectable()
 export class AppService {
+  private cache: Map<string, { data: TransactionResponse; timestamp: number }> =
+    new Map();
+  private readonly CACHE_TTL = 60000; // 60 seconds
+
   getHello(): string {
     return 'Hello World!';
   }
 
-  async getTransactionsFromBlock(blockId: string): Promise<any> {
+  async getTransactionsFromBlock(
+    blockId: string,
+  ): Promise<TransactionResponse> {
+    if (!blockId || !/^\d+$/.test(blockId)) {
+      return {
+        status: HTTP_STATUS.BAD_REQUEST,
+        message: MESSAGE_STATUS.INVALID_BLOCK_ID,
+      };
+    }
+
+    // Check cache
+    const cached = this.cache.get(blockId);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+      return cached.data;
+    }
+
     const requestBody = {
       jsonrpc: '2.0',
       id: 1,
@@ -49,21 +60,35 @@ export class AppService {
 
       if (data.error) {
         if (data.error.message.includes('Block not available for slot')) {
-          return {
+          const errorResponse = {
             status: HTTP_STATUS.NOT_FOUND,
             message: MESSAGE_STATUS.BLOCK_NOT_EXIST,
           };
+          // Cache error response
+          this.cache.set(blockId, {
+            data: errorResponse,
+            timestamp: Date.now(),
+          });
+          return errorResponse;
         }
         throw new Error(`RPC Error: ${data.error.message}`);
       }
 
-      return {
+      const successResponse = {
         status: HTTP_STATUS.OK,
         message: MESSAGE_STATUS.SUCCESS,
         data: {
-          txs_count: data.result?.transactions?.length || 0,
+          transactionCount: data.result?.transactions?.length || 0,
         },
       };
+
+      // Cache successful response
+      this.cache.set(blockId, {
+        data: successResponse,
+        timestamp: Date.now(),
+      });
+
+      return successResponse;
     } catch (error) {
       throw new Error(
         `Failed to fetch transactions from block: ${(error as Error).message}`,
