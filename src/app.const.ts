@@ -8,8 +8,31 @@ export const HTTP_STATUS = {
 };
 
 export const MESSAGE_STATUS = {
-  SUCCESS: 'success',
+  SUCCESS: 'Success',
   BLOCK_NOT_EXIST: 'Block does not exist',
+  INVALID_BLOCK_ID: 'Invalid block ID. Must be a valid number.',
 };
 
 export const RPC_URL = 'https://api.mainnet-beta.solana.com';
+
+export interface BlockResult {
+  transactions: unknown[];
+}
+
+export interface SolanaRpcResponse {
+  jsonrpc: string;
+  id: number;
+  result?: BlockResult;
+  error?: {
+    code: number;
+    message: string;
+  };
+}
+
+export interface TransactionResponse {
+  status: number;
+  message: string;
+  data?: {
+    transactionCount: number;
+  };
+}
